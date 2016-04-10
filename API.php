@@ -81,13 +81,13 @@ class APIRequest {
         return $this;
     }
     
-    public function get($path) {
+    public function get($path, $parameters = []) {
         
         $ch = curl_init();
         
         curl_setopt_array($ch, $k = array(
             CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_URL => $this->buildUrl($path),
+            CURLOPT_URL => $this->buildUrl($path, $parameters),
             CURLOPT_USERAGENT => 'My Test App'
         ));
 
@@ -103,30 +103,113 @@ class APIRequest {
         return json_decode($response, true);
     }
     
-    private function buildUrl($path) {
-        return sprintf('https://api.instagram.com/v1/%s?access_token=%s', (trim($path, '/') . '/'), $this->accessToken);
+    public function post($path, $data, $parameters) {
+        throw new Exception("Implement");
+    }
+    
+    private function buildUrl($path, $parameters = []) {
+        $appendToUrl = '';
+        foreach ($parameters as $name => $value) {
+            $appentToUrl .= "&{$name}={$value}";
+        }
+        
+        return sprintf('https://api.instagram.com/v1/%s?access_token=%s%s', (trim($path, '/') . '/'), $this->accessToken, $appendToUrl);
     }
 }
 
-class InstagramUser {
+
+class InstagramCall {
     
-    private $req;
+    protected $req;
     
-    public function __construct(APIRequest $req) {
-        $this->req = $req;
+    protected $params = [];
+    
+    public function __construct(APIRequest $r) {
+        $this->req = $r;
+        $this->onInit();
     }
     
-    public function getUser() {
-        return $this->checkResponse($this->req->get('users/self'));
+    protected function onInit() { }
+    
+    protected function beforeSend() { }
+    
+    protected function onResponse(&$response) { }
+    
+    public function addParams(array $params) {
+        $this->params = $params;
+        return $this;
     }
     
-    //check is valid response
-    private function checkResponse($response) {
-        if (!isset($response['meta'])) {
-            throw new Exception("Unknown format is returned by api ".json_encode($response));
-        }
+    public function flushParams() {
+        $this->params = [];
+        return $this;
+    }
+    
+    public function getParams() {
+        return $this->params;
+    }
+    
+    private function getApiRequest() {
+        return $this->req;    
+    } 
+    
+    protected function get($path) {
+        $this->beforeSend();
+        $response = $this->getApiRequest()->get($path, $this->getParams());
+        $this->onResponse($response);
         
         return $response;
     }
+    
+    protected function post($path, $data) {
+        $this->beforeSend();
+        $response = $this->getApiRequest()->post($path, $data, $this->getParams());
+        $this->onResponse($response);
+        
+        return $response;
+    }
+
 }
+
+/*
+class InstagramEntity {
+    
+    protected $data;
+    
+    public function __construct($data) {
+        $this->data = $data;
+    }
+    
+}
+
+
+class InstagramUserEntity {
+    
+}*/
+
+
+
+class InstagramUser extends InstagramCall {
+    
+    public function getUser($id = null) {
+        return is_numeric($id) ?
+        $this->get(sprintf('/users/%s', (string)$id))
+        :
+        $this->get('users/self');
+    }
+    
+    //check is valid response
+    protected function onResponse(&$response) {
+        if (!isset($response['meta'])) {
+            throw new Exception("Unknown format is returned by api ".json_encode($response));
+        }
+    }
+}
+
+
+
+
+
+
+
 
